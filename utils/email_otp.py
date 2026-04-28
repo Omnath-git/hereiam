@@ -31,13 +31,13 @@ def send_email_otp(to_email, otp, purpose="verify"):
         body = ""
         
         if purpose == "verify":
-            subject = "🔐 Professionals Data Bank - Email Verification OTP"
+            subject = "🔐 HereIAM - Email Verification OTP"
             body = f"""
             <html>
             <body style="font-family: Arial, sans-serif; padding: 20px;">
                 <div style="max-width: 500px; margin: auto; background: #f9fafb; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
                     <div style="text-align: center; margin-bottom: 24px;">
-                        <h2 style="color: #8b5cf6; margin: 0;">Professionals Data Bank</h2>
+                        <h2 style="color: #8b5cf6; margin: 0;">HereIAM</h2>
                         <p style="color: #64748b; margin: 4px 0 0;">Email Verification</p>
                     </div>
                     
@@ -62,7 +62,7 @@ def send_email_otp(to_email, otp, purpose="verify"):
             </html>
             """
         elif purpose == "login":
-            subject = "🔑 Professionals Data Bank - Login OTP"
+            subject = "🔑 HereIAM - Login OTP"
             body = f"""
             <html>
             <body style="font-family: Arial, sans-serif; padding: 20px;">
@@ -81,7 +81,7 @@ def send_email_otp(to_email, otp, purpose="verify"):
         # Create message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
-        msg['From'] = f"Professionals Data Bank <{SMTP_CONFIG['email']}>"
+        msg['From'] = f"HereIAM <{SMTP_CONFIG['email']}>"
         msg['To'] = to_email
         msg.attach(MIMEText(body, 'html'))
         
@@ -90,20 +90,10 @@ def send_email_otp(to_email, otp, purpose="verify"):
             if SMTP_CONFIG['use_tls']:
                 server.starttls()
             server.login(SMTP_CONFIG['email'], SMTP_CONFIG['password'])
-            server.send_message(msg)
+            server.send_message(msg)      
         
-        print(f"✅ OTP sent to {to_email}: {otp}")
         return True
         
     except Exception as e:
         print(f"❌ Email error: {e}")
-        print(f"🔑 OTP for {to_email}: {otp}")  # Fallback: console mein print
         return False
-
-# ============================================================
-# GMAIL APP PASSWORD कैसे बनाएं:
-# 1. https://myaccount.google.com/apppasswords पर जाएं
-# 2. "Select app" → "Other (Custom name)" → "Professionals Data Bank"
-# 3. "GENERATE" पर क्लिक करें
-# 4. मिलने वाला 16-अंक का password ऊपर 'password' में डालें
-# ============================================================
