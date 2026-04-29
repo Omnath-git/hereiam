@@ -1,5 +1,6 @@
 cd ~/hereiam_portal/hereiam
 source ../venv/bin/activate
+cd hereiam
 git fetch --all
 git reset --hard origin/master
 sudo pkill gunicorn

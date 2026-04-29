@@ -41,7 +41,7 @@ def create_app():
     app.register_blueprint(scraper_bp)  # ⭐ scraper blueprint register
     
     # ⭐ Start job scraper
-    start_job_scraper(app)
+    # start_job_scraper(app)
     
     return app
 if __name__ == '__main__':

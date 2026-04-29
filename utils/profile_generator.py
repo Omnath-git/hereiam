@@ -5,6 +5,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 from utils.helpers import safe_json_loads
 
+
 def generate_profile_html(user, app):
     """Generate beautiful, modern HTML profile page"""
     try:
@@ -55,11 +56,20 @@ def generate_profile_html(user, app):
             mobile_display = user.mobile[:3] + '****' + user.mobile[-3:] if len(user.mobile) >= 10 else 'Hidden'
             mobile_link = "#"
         
+        # ⭐ Fix: Experience display - blank nahi, balki sahi value ya empty
+        if user.experience_years and user.experience_years.strip() and user.experience_years.lower() != 'fresher':
+            experience_display = user.experience_years
+        elif user.experience_years and user.experience_years.lower() == 'fresher':
+            experience_display = 'Fresher'
+        else:
+            experience_display = ''
+        
         # Build HTML
         html = build_complete_html(
             user, profile_photo_url,
             email_display, email_link,
             mobile_display, mobile_link,
+            experience_display,
             skills, education, experience, projects,
             certifications, languages, achievements
         )
@@ -69,35 +79,87 @@ def generate_profile_html(user, app):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html)
         
-        print(f"✅ Profile generated: {filename}")
+        print(f"Profile generated: {filename}")
         return filename
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
         return None
 
 
 def build_complete_html(user, photo_url, email_display, email_link, mobile_display, mobile_link,
-                        skills, education, experience, projects, certifications, languages, achievements):
-    """Build complete HTML"""
+                        experience_display, skills, education, experience, projects,
+                        certifications, languages, achievements):
+    """Build complete HTML - all f-strings properly escaped"""
     
-    sections_html = build_all_sections(
-        user, skills, education, experience, projects,
-        certifications, languages, achievements
-    )
-    
-    # ⭐ Social links
+    # Pre-build all sections
+    about_html = build_about_section(user)
+    skills_html = build_skills_section(skills)
+    experience_html = build_experience_section(experience)
+    education_html = build_education_section(education)
+    projects_html = build_projects_section(projects)
+    certifications_html = build_certifications_section(certifications)
+    languages_html = build_languages_section(languages)
+    achievements_html = build_achievements_section(achievements)
     social_links = build_social_links(user)
     
-    html = f'''<!DOCTYPE html>
+    # Combine sections
+    sections_html = (about_html + skills_html + experience_html + 
+                    education_html + projects_html + certifications_html +
+                    languages_html + achievements_html)
+    
+    # Experience display with fallback
+    exp_display = experience_display if experience_display else 'Fresher'
+    
+    # Hero meta items
+    hero_meta_items = ''
+    if experience_display:
+        hero_meta_items += f'<span class="hero-meta-item"><i class="fas fa-clock"></i> {experience_display}</span>\n'
+    hero_meta_items += f'<span class="hero-meta-item"><i class="fas fa-map-marker-alt"></i> {user.city}, {user.state}</span>\n'
+    if user.expected_salary:
+        hero_meta_items += f'<span class="hero-meta-item"><i class="fas fa-rupee-sign salary"></i> {user.expected_salary}</span>\n'
+    if user.notice_period:
+        hero_meta_items += f'<span class="hero-meta-item"><i class="fas fa-calendar-alt notice"></i> {user.notice_period}</span>\n'
+    
+    # Sidebar info items
+    sidebar_info = ''
+    sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-clock"></i> {exp_display}</div>\n'
+    sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-map-marker-alt"></i> {user.city}, {user.state}</div>\n'
+    sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-envelope"></i> {email_display}</div>\n'
+    sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-phone"></i> {mobile_display}</div>\n'
+    if user.expected_salary:
+        sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-rupee-sign"></i> {user.expected_salary}</div>\n'
+    if user.notice_period:
+        sidebar_info += f'<div class="sidebar-info-item"><i class="fas fa-calendar-alt"></i> {user.notice_period}</div>\n'
+    
+    # Sidebar social card
+    sidebar_social = ''
+    if social_links:
+        sidebar_social = f'''<div class="sidebar-card">
+            <h4 style="font-weight:700;margin-bottom:12px;color:var(--dark);">
+                <i class="fas fa-link me-2" style="color:var(--primary);"></i>Connect
+            </h4>
+            <div class="social-links">{social_links}</div>
+        </div>'''
+    
+    # Contact social
+    contact_social = ''
+    if social_links:
+        contact_social = f'<div class="social-links" style="margin-top:20px;">{social_links}</div>'
+    
+    # Current year
+    current_year = datetime.now().year
+    
+    # ⭐ BUILD COMPLETE HTML - using .format() to avoid f-string nesting issues
+    html = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="{user.full_name} - {user.domain} | Here I am">
-    <title>{user.full_name} - {user.domain} | Here I am</title>
+    <meta name="description" content="{full_name} - {domain} | Professionals Data Bank">
+    <title>{full_name} - {domain} | Professionals Data Bank</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -296,8 +358,6 @@ def build_complete_html(user, photo_url, email_display, email_link, mobile_displ
             color: var(--dark-2);
         }}
         .hero-meta-item i {{ color: var(--primary); font-size: 0.9rem; }}
-        .hero-meta-item .salary {{ color: var(--success); }}
-        .hero-meta-item .notice {{ color: var(--warning); }}
         
         .hero-photo-wrapper {{
             flex-shrink: 0;
@@ -322,11 +382,7 @@ def build_complete_html(user, photo_url, email_display, email_link, mobile_displ
             position: relative;
             z-index: 1;
         }}
-        .hero-photo img {{
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }}
+        .hero-photo img {{ width: 100%; height: 100%; object-fit: cover; }}
         
         /* ============ MAIN LAYOUT ============ */
         .main-container {{
@@ -345,479 +401,177 @@ def build_complete_html(user, photo_url, email_display, email_link, mobile_displ
         .section-card {{
             background: white;
             border-radius: var(--radius-xl);
-            padding: 32px;
-            margin-bottom: 24px;
+            padding: 24px 28px;
+            margin-bottom: 20px;
             box-shadow: var(--shadow-sm);
             border: 1px solid #f1f5f9;
             transition: all 0.3s;
         }}
-        .section-card:hover {{
-            box-shadow: var(--shadow-lg);
-            transform: translateY(-2px);
-        }}
+        .section-card:hover {{ box-shadow: var(--shadow-lg); transform: translateY(-2px); }}
         .section-title {{
             font-family: 'Playfair Display', serif;
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             font-weight: 700;
             color: var(--dark);
-            margin-bottom: 24px;
-            padding-bottom: 14px;
+            margin-bottom: 18px;
+            padding-bottom: 10px;
             border-bottom: 2px solid var(--light-2);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }}
-        .section-title i {{
-            color: var(--primary);
-            font-size: 1.3rem;
-        }}
-        .section-subtitle {{
-            color: var(--secondary);
-            font-size: 0.9rem;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }}
+        .section-title i {{ color: var(--primary); font-size: 1.1rem; }}
+        .section-subtitle {{ color: var(--secondary); font-size: 0.88rem; margin-bottom: 16px; line-height: 1.7; }}
         
         /* ============ SKILLS ============ */
-        .skills-container {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }}
+        .skills-container {{ display: flex; flex-wrap: wrap; gap: 6px; }}
         .skill-item {{
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             background: var(--primary-bg);
             color: var(--primary-dark);
-            padding: 8px 16px;
+            padding: 6px 14px;
             border-radius: 50px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 600;
             transition: all 0.3s;
             border: 1px solid transparent;
         }}
-        .skill-item:hover {{
-            background: var(--primary);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99,102,241,0.3);
-        }}
-        .skill-item.skill-level-expert {{
-            background: linear-gradient(135deg, #dbeafe, #ede9fe);
-            border-color: #c4b5fd;
-        }}
-        .skill-item.skill-level-advanced {{
-            background: #f0fdf4;
-            border-color: #bbf7d0;
-        }}
+        .skill-item:hover {{ background: var(--primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }}
+        .skill-item.skill-level-expert {{ background: linear-gradient(135deg, #dbeafe, #ede9fe); border-color: #c4b5fd; }}
+        .skill-item.skill-level-advanced {{ background: #f0fdf4; border-color: #bbf7d0; }}
         
-        /* ============ EXPERIENCE TIMELINE ============ */
-        .timeline {{ position: relative; padding-left: 32px; }}
-        .timeline::before {{
-            content: '';
-            position: absolute;
-            left: 8px;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: linear-gradient(to bottom, var(--primary), var(--primary-light), transparent);
+        /* ============ EXPERIENCE ============ */
+        .exp-list {{ display: flex; flex-direction: column; gap: 12px; }}
+        .exp-card {{
+            background: var(--light); border-radius: var(--radius-md); padding: 14px 16px;
+            border-left: 3px solid var(--primary); transition: all 0.3s;
         }}
-        .timeline-item {{
-            position: relative;
-            margin-bottom: 32px;
-            padding-left: 24px;
-        }}
-        .timeline-item:last-child {{ margin-bottom: 0; }}
-        .timeline-dot {{
-            position: absolute;
-            left: -28px;
-            top: 6px;
-            width: 14px;
-            height: 14px;
-            background: var(--primary);
-            border-radius: 50%;
-            border: 3px solid white;
-            box-shadow: 0 0 0 4px var(--primary-bg);
-        }}
-        .timeline-dot.current {{
-            background: var(--success);
-            box-shadow: 0 0 0 4px var(--success-light);
-            animation: pulse 2s infinite;
-        }}
-        @keyframes pulse {{
-            0%, 100% {{ box-shadow: 0 0 0 4px var(--success-light); }}
-            50% {{ box-shadow: 0 0 0 10px rgba(16,185,129,0.1); }}
-        }}
-        .timeline-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 6px;
-        }}
-        .timeline-title {{
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: var(--dark);
-        }}
-        .timeline-company {{
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--primary);
-        }}
-        .timeline-duration {{
-            display: inline-block;
-            background: var(--primary-bg);
-            color: var(--primary-dark);
-            padding: 4px 12px;
-            border-radius: 50px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }}
-        .timeline-duration.current-duration {{
-            background: var(--success-light);
-            color: #065f46;
-        }}
-        .timeline-description {{
-            font-size: 0.88rem;
-            color: var(--secondary);
-            margin-top: 8px;
-            line-height: 1.7;
-        }}
+        .exp-card:hover {{ background: white; box-shadow: var(--shadow-md); }}
+        .exp-card.current {{ border-left-color: var(--success); background: #f0fdf4; }}
+        .exp-card-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }}
+        .exp-title {{ font-weight: 700; font-size: 0.9rem; color: var(--dark); }}
+        .exp-company {{ font-weight: 600; font-size: 0.82rem; color: var(--primary); }}
+        .exp-duration {{ font-size: 0.7rem; background: var(--primary-bg); color: var(--primary-dark); padding: 3px 10px; border-radius: 50px; font-weight: 600; white-space: nowrap; }}
+        .exp-duration.current-dur {{ background: #d1fae5; color: #065f46; }}
+        .exp-desc {{ font-size: 0.8rem; color: var(--secondary); margin-top: 6px; }}
         
         /* ============ EDUCATION ============ */
-        .education-item {{
-            display: flex;
-            gap: 16px;
-            padding: 16px;
-            margin-bottom: 16px;
-            background: var(--light-2);
-            border-radius: var(--radius-md);
-            border-left: 4px solid var(--primary);
-            transition: all 0.3s;
+        .edu-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }}
+        .edu-card {{
+            background: var(--light); border-radius: var(--radius-md); padding: 14px;
+            border-top: 3px solid var(--primary); transition: all 0.3s;
         }}
-        .education-item:hover {{
-            background: white;
-            box-shadow: var(--shadow-md);
-            border-left-color: var(--primary-dark);
-        }}
-        .education-icon {{
-            width: 44px;
-            height: 44px;
-            background: var(--primary-bg);
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--primary);
-            font-size: 1.1rem;
-            flex-shrink: 0;
-        }}
-        .education-info {{ flex: 1; }}
-        .education-degree {{
-            font-weight: 700;
-            color: var(--dark);
-            font-size: 0.95rem;
-            margin-bottom: 2px;
-        }}
-        .education-institution {{
-            color: var(--secondary);
-            font-size: 0.85rem;
-        }}
-        .education-year {{
-            display: inline-block;
-            background: white;
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            color: var(--secondary);
-            margin-top: 4px;
-        }}
+        .edu-card:hover {{ background: white; box-shadow: var(--shadow-md); }}
+        .edu-degree {{ font-weight: 700; font-size: 0.85rem; color: var(--dark); margin-bottom: 2px; }}
+        .edu-inst {{ font-size: 0.78rem; color: var(--secondary); }}
+        .edu-year {{ display: inline-block; font-size: 0.68rem; color: var(--primary); font-weight: 600; margin-top: 4px; }}
         
         /* ============ PROJECTS ============ */
-        .projects-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 16px;
+        .proj-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }}
+        .proj-card {{
+            background: var(--light); border-radius: var(--radius-md); padding: 14px;
+            border: 1px solid #e5e7eb; transition: all 0.3s;
         }}
-        .project-card {{
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: var(--radius-lg);
-            padding: 20px;
-            transition: all 0.3s;
-        }}
-        .project-card:hover {{
-            box-shadow: var(--shadow-lg);
-            transform: translateY(-3px);
-            border-color: var(--primary-light);
-        }}
-        .project-card-header {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }}
-        .project-icon {{
-            width: 40px;
-            height: 40px;
-            background: var(--gradient-1);
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            flex-shrink: 0;
-        }}
-        .project-name {{
-            font-weight: 700;
-            font-size: 0.95rem;
-            color: var(--dark);
-        }}
-        .project-desc {{
-            font-size: 0.82rem;
-            color: var(--secondary);
-            margin-bottom: 10px;
-            line-height: 1.6;
-        }}
-        .project-tech {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-        }}
-        .project-tech-tag {{
-            background: var(--light-2);
-            color: var(--secondary);
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            font-weight: 500;
-        }}
+        .proj-card:hover {{ background: white; box-shadow: var(--shadow-md); transform: translateY(-2px); }}
+        .proj-name {{ font-weight: 700; font-size: 0.85rem; color: var(--dark); margin-bottom: 4px; }}
+        .proj-desc {{ font-size: 0.75rem; color: var(--secondary); margin-bottom: 6px; }}
+        .proj-tech {{ display: flex; flex-wrap: wrap; gap: 3px; }}
+        .proj-tech-tag {{ background: white; color: var(--secondary); padding: 2px 7px; border-radius: 20px; font-size: 0.65rem; font-weight: 500; border: 1px solid #e5e7eb; }}
         
         /* ============ CERTIFICATIONS ============ */
-        .cert-list {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
+        .cert-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+        .cert-tag {{
+            display: flex; align-items: center; gap: 5px;
+            background: linear-gradient(135deg, #fef3c7, #fef9c3); padding: 6px 12px;
+            border-radius: 50px; font-weight: 600; font-size: 0.75rem; color: #92400e;
         }}
-        .cert-item {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: linear-gradient(135deg, #fef3c7, #fef9c3);
-            padding: 10px 16px;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.82rem;
-            color: #92400e;
-            border: 1px solid #fde68a;
-        }}
-        .cert-item i {{ color: var(--warning); }}
+        .cert-tag i {{ color: var(--warning); font-size: 0.7rem; }}
         
         /* ============ LANGUAGES ============ */
-        .lang-list {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }}
-        .lang-item {{
-            background: white;
-            border: 2px solid #e2e8f0;
-            padding: 8px 16px;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--dark-2);
+        .lang-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+        .lang-tag {{
+            background: white; border: 2px solid #e2e8f0; padding: 6px 14px;
+            border-radius: 50px; font-weight: 600; font-size: 0.78rem; color: var(--dark-2);
             transition: all 0.3s;
         }}
-        .lang-item:hover {{
-            border-color: var(--primary);
-            color: var(--primary);
-            transform: translateY(-2px);
-        }}
+        .lang-tag:hover {{ border-color: var(--primary); color: var(--primary); }}
         
         /* ============ ACHIEVEMENTS ============ */
-        .achievement-item {{
-            display: flex;
-            gap: 14px;
-            padding: 14px;
-            margin-bottom: 12px;
+        .ach-list {{ display: flex; flex-direction: column; gap: 8px; }}
+        .ach-item {{
+            display: flex; gap: 10px; padding: 10px 12px;
             background: linear-gradient(135deg, #faf5ff, #f5f3ff);
-            border-radius: var(--radius-md);
-            border-left: 3px solid var(--purple);
+            border-radius: var(--radius-sm); border-left: 3px solid var(--purple);
+            font-size: 0.82rem; color: var(--dark-2); font-weight: 500;
         }}
-        .achievement-item i {{ color: var(--warning); font-size: 1.1rem; margin-top: 2px; }}
-        .achievement-item span {{ color: var(--dark-2); font-weight: 500; font-size: 0.9rem; }}
+        .ach-item i {{ color: var(--warning); font-size: 0.9rem; margin-top: 2px; flex-shrink: 0; }}
         
         /* ============ SIDEBAR ============ */
         .sidebar-card {{
-            background: white;
-            border-radius: var(--radius-xl);
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid #f1f5f9;
+            background: white; border-radius: var(--radius-lg); padding: 18px;
+            margin-bottom: 14px; box-shadow: var(--shadow-sm); border: 1px solid #f1f5f9;
             text-align: center;
         }}
-        .sidebar-avatar {{
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid white;
-            box-shadow: var(--shadow-lg);
-            margin-bottom: 12px;
-        }}
-        .sidebar-name {{
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: var(--dark);
-            margin-bottom: 2px;
-        }}
-        .sidebar-domain {{
-            color: var(--primary);
-            font-weight: 600;
-            font-size: 0.85rem;
-            margin-bottom: 16px;
-        }}
+        .sidebar-avatar {{ width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 4px solid white; box-shadow: var(--shadow-md); margin-bottom: 8px; }}
+        .sidebar-name {{ font-weight: 700; font-size: 1rem; color: var(--dark); margin-bottom: 2px; }}
+        .sidebar-domain {{ color: var(--primary); font-weight: 600; font-size: 0.78rem; margin-bottom: 10px; }}
+        .sidebar-info {{ text-align: left; }}
         .sidebar-info-item {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--light-2);
-            font-size: 0.82rem;
-            color: var(--secondary);
+            display: flex; align-items: center; gap: 8px; padding: 6px 0;
+            border-bottom: 1px solid var(--light-2); font-size: 0.75rem; color: var(--secondary);
         }}
         .sidebar-info-item:last-child {{ border-bottom: none; }}
-        .sidebar-info-item i {{
-            width: 20px;
-            color: var(--primary);
-            text-align: center;
-        }}
+        .sidebar-info-item i {{ width: 16px; color: var(--primary); text-align: center; font-size: 0.75rem; }}
         
-        /* ============ CONTACT SECTION ============ */
-        .contact-section {{
-            background: var(--gradient-2);
-            border-radius: var(--radius-xl);
-            padding: 48px;
-            text-align: center;
-            color: white;
-            margin-top: 24px;
+        /* ============ CONTACT ============ */
+        .contact-bar {{
+            background: var(--gradient-2); border-radius: var(--radius-lg); padding: 28px;
+            text-align: center; color: white; margin-top: 20px;
         }}
-        .contact-section h2 {{
-            font-family: 'Playfair Display', serif;
-            font-size: 2rem;
-            margin-bottom: 8px;
-        }}
-        .contact-section p {{ opacity: 0.8; margin-bottom: 24px; }}
-        .contact-buttons {{
-            display: flex;
-            justify-content: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }}
+        .contact-bar h2 {{ font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 4px; }}
+        .contact-bar p {{ opacity: 0.8; font-size: 0.85rem; margin-bottom: 16px; }}
+        .contact-btns {{ display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }}
         .contact-btn {{
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.3s;
-            font-size: 0.9rem;
+            display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px;
+            border-radius: 50px; font-weight: 600; text-decoration: none; transition: all 0.3s; font-size: 0.82rem;
         }}
-        .contact-btn-email {{
-            background: white;
-            color: var(--dark);
-        }}
-        .contact-btn-email:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            color: var(--dark);
-        }}
-        .contact-btn-phone {{
-            background: rgba(255,255,255,0.15);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.3);
-        }}
-        .contact-btn-phone:hover {{
-            background: rgba(255,255,255,0.25);
-            transform: translateY(-2px);
-            color: white;
-        }}
+        .contact-btn-email {{ background: white; color: var(--dark); }}
+        .contact-btn-email:hover {{ transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.2); color: var(--dark); }}
+        .contact-btn-phone {{ background: rgba(255,255,255,.15); color: white; border: 1px solid rgba(255,255,255,.25); }}
+        .contact-btn-phone:hover {{ background: rgba(255,255,255,.25); transform: translateY(-2px); color: white; }}
         
-        /* ============ SOCIAL LINKS ============ */
-        .social-links {{
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 16px;
-        }}
-        .social-link {{
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1rem;
-            transition: all 0.3s;
-            text-decoration: none;
-        }}
-        .social-link:hover {{
-            transform: translateY(-4px);
-            color: white;
-        }}
+        /* ============ SOCIAL ============ */
+        .social-links {{ display: flex; justify-content: center; gap: 8px; margin-top: 10px; }}
+        .social-link {{ width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 0.85rem; transition: all 0.3s; text-decoration: none; }}
+        .social-link:hover {{ transform: translateY(-3px); color: white; }}
         .social-link.linkedin {{ background: #0077b5; }}
         .social-link.github {{ background: #333; }}
         .social-link.website {{ background: var(--success); }}
         
         /* ============ FOOTER ============ */
-        .footer {{
-            text-align: center;
-            padding: 32px;
-            color: var(--secondary);
-            font-size: 0.8rem;
-            border-top: 1px solid #e2e8f0;
-            margin-top: 40px;
-        }}
+        .footer {{ text-align: center; padding: 20px; color: var(--secondary); font-size: 0.72rem; border-top: 1px solid #e2e8f0; margin-top: 16px; }}
         
         /* ============ RESPONSIVE ============ */
         @media (max-width: 1024px) {{
-            .main-container {{
-                grid-template-columns: 1fr;
-            }}
-            .hero-container {{
-                flex-direction: column-reverse;
-                text-align: center;
-                gap: 30px;
-            }}
-            .hero-name {{ font-size: 2.5rem; }}
-            .hero-summary {{ margin: 0 auto 24px; }}
-            .hero-meta {{ justify-content: center; }}
-            .hero-photo {{ width: 180px; height: 180px; }}
+            .main-container {{ grid-template-columns: 1fr; }}
         }}
-        @media (max-width: 768px) {{
-            .hero {{ padding: 120px 0 60px; }}
+        @media (max-width: 640px) {{
+            .hero-container {{ flex-direction: column-reverse; text-align: center; gap: 20px; }}
             .hero-name {{ font-size: 2rem; }}
-            .section-card {{ padding: 20px; }}
-            .projects-grid {{ grid-template-columns: 1fr; }}
-            .contact-section {{ padding: 32px 20px; }}
+            .hero-photo {{ width: 140px; height: 140px; }}
+            .hero-meta {{ justify-content: center; }}
+            .edu-grid, .proj-grid {{ grid-template-columns: 1fr; }}
         }}
     </style>
 </head>
 <body>
-    <!-- Navbar -->
     <nav class="navbar" id="navbar">
         <div class="nav-container">
             <a href="#" class="nav-brand">
                 <span class="nav-brand-icon"><i class="fas fa-database"></i></span>
-                Here I am
+                Professionals Data Bank
             </a>
             <div class="nav-links">
                 <a href="#about" class="nav-link">About</a>
@@ -830,113 +584,78 @@ def build_complete_html(user, photo_url, email_display, email_link, mobile_displ
         </div>
     </nav>
     
-    <!-- Hero Section -->
     <section class="hero">
         <div class="hero-container">
             <div class="hero-content">
-                <div class="hero-badge">
-                    <i class="fas fa-check-circle"></i> Verified Professional
-                </div>
-                <h1 class="hero-name">{user.full_name}</h1>
-                <p class="hero-title-text">{user.domain}</p>
-                <p class="hero-summary">{user.summary or ''}</p>
+                <div class="hero-badge"><i class="fas fa-check-circle"></i> Verified Professional</div>
+                <h1 class="hero-name">{full_name}</h1>
+                <p class="hero-title-text">{domain}</p>
+                {summary_html}
                 <div class="hero-meta">
-                    <span class="hero-meta-item">
-                        <i class="fas fa-clock"></i> {user.experience_years or 'Fresher'}
-                    </span>
-                    <span class="hero-meta-item">
-                        <i class="fas fa-map-marker-alt"></i> {user.city}, {user.state}
-                    </span>
-                    {f'<span class="hero-meta-item"><i class="fas fa-rupee-sign salary"></i> {user.expected_salary}</span>' if user.expected_salary else ''}
-                    {f'<span class="hero-meta-item"><i class="fas fa-calendar-alt notice"></i> {user.notice_period}</span>' if user.notice_period else ''}
+                    {hero_meta_items}
                 </div>
             </div>
             <div class="hero-photo-wrapper">
                 <div class="hero-photo-ring"></div>
                 <div class="hero-photo">
-                    <img src="{photo_url}" alt="{user.full_name}" onerror="this.src='../static/uploads/profile_photos/avatar.png'">
+                    <img src="{photo_url}" alt="{full_name}" onerror="this.src='../static/uploads/profile_photos/avatar.png'">
                 </div>
             </div>
         </div>
     </section>
     
-    <!-- Main Content + Sidebar -->
-    <div class="main-container">
-        <!-- Left Column -->
-        <div class="main-content">
+    <div class="main-grid" style="max-width:1200px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:1fr 300px;gap:20px;margin-top:-20px;position:relative;z-index:10;">
+        <div>
             {sections_html}
         </div>
-        
-        <!-- Right Sidebar -->
-        <div class="sidebar">
-            <!-- Profile Card -->
+        <div>
             <div class="sidebar-card">
-                <img src="{photo_url}" alt="{user.full_name}" class="sidebar-avatar" onerror="this.src='../static/uploads/profile_photos/avatar.png'">
-                <h3 class="sidebar-name">{user.full_name}</h3>
-                <p class="sidebar-domain">{user.domain}</p>
-                <div class="sidebar-info-item"><i class="fas fa-clock"></i> {user.experience_years or 'Fresher'}</div>
-                <div class="sidebar-info-item"><i class="fas fa-map-marker-alt"></i> {user.city}, {user.state}</div>
-                <div class="sidebar-info-item"><i class="fas fa-envelope"></i> {email_display}</div>
-                <div class="sidebar-info-item"><i class="fas fa-phone"></i> {mobile_display}</div>
-                {f'<div class="sidebar-info-item"><i class="fas fa-rupee-sign"></i> {user.expected_salary}</div>' if user.expected_salary else ''}
-                {f'<div class="sidebar-info-item"><i class="fas fa-calendar-alt"></i> {user.notice_period}</div>' if user.notice_period else ''}
+                <img src="{photo_url}" alt="{full_name}" class="sidebar-avatar" onerror="this.src='../static/uploads/profile_photos/avatar.png'">
+                <h3 class="sidebar-name">{full_name}</h3>
+                <p class="sidebar-domain">{domain}</p>
+                <div class="sidebar-info">
+                    {sidebar_info}
+                </div>
             </div>
             
-            <!-- Quick Stats -->
             <div class="sidebar-card">
-                <h4 style="font-weight:700;margin-bottom:12px;color:var(--dark);">
-                    <i class="fas fa-chart-bar me-2" style="color:var(--primary);"></i>Quick Stats
-                </h4>
-                <div class="sidebar-info-item"><i class="fas fa-tools"></i> <strong>{len(skills)}</strong> Skills</div>
-                <div class="sidebar-info-item"><i class="fas fa-briefcase"></i> <strong>{len(experience)}</strong> Experiences</div>
-                <div class="sidebar-info-item"><i class="fas fa-graduation-cap"></i> <strong>{len(education)}</strong> Education</div>
-                <div class="sidebar-info-item"><i class="fas fa-project-diagram"></i> <strong>{len(projects)}</strong> Projects</div>
-                <div class="sidebar-info-item"><i class="fas fa-certificate"></i> <strong>{len(certifications)}</strong> Certifications</div>
+                <h6 style="font-weight:700;margin-bottom:10px;color:var(--dark);"><i class="fas fa-chart-pie me-2" style="color:var(--primary);"></i>Quick Stats</h6>
+                <div class="sidebar-info">
+                    <div class="sidebar-info-item"><i class="fas fa-tools"></i> <strong>{skills_count}</strong> Skills</div>
+                    <div class="sidebar-info-item"><i class="fas fa-briefcase"></i> <strong>{exp_count}</strong> Experiences</div>
+                    <div class="sidebar-info-item"><i class="fas fa-graduation-cap"></i> <strong>{edu_count}</strong> Education</div>
+                    <div class="sidebar-info-item"><i class="fas fa-project-diagram"></i> <strong>{proj_count}</strong> Projects</div>
+                    <div class="sidebar-info-item"><i class="fas fa-certificate"></i> <strong>{cert_count}</strong> Certs</div>
+                </div>
             </div>
-            
-            <!-- Social Links -->
-            {f'''<div class="sidebar-card">
-                <h4 style="font-weight:700;margin-bottom:12px;color:var(--dark);">
-                    <i class="fas fa-link me-2" style="color:var(--primary);"></i>Connect
-                </h4>
-                <div class="social-links">{social_links}</div>
-            </div>''' if social_links else ''}
+            {sidebar_social}
         </div>
     </div>
     
-    <!-- Contact Section -->
-    <section id="contact" style="max-width:1200px;margin:0 auto;padding:0 24px;">
-        <div class="contact-section">
+    <div style="max-width:1200px;margin:0 auto;padding:0 24px;">
+        <div class="contact-bar" id="contact">
             <h2>Get In Touch</h2>
-            <p>Interested in collaborating? Feel free to reach out!</p>
-            <div class="contact-buttons">
-                <a href="{email_link}" class="contact-btn contact-btn-email">
-                    <i class="fas fa-envelope"></i> {email_display}
-                </a>
-                <a href="{mobile_link}" class="contact-btn contact-btn-phone">
-                    <i class="fas fa-phone"></i> {mobile_display}
-                </a>
+            <p>Interested in collaborating? Reach out!</p>
+            <div class="contact-btns">
+                <a href="{email_link}" class="contact-btn contact-btn-email"><i class="fas fa-envelope"></i> {email_display}</a>
+                <a href="{mobile_link}" class="contact-btn contact-btn-phone"><i class="fas fa-phone"></i> {mobile_display}</a>
             </div>
-            {f'<div class="social-links" style="margin-top:20px;">{social_links}</div>' if social_links else ''}
+            {contact_social}
         </div>
-    </section>
+    </div>
     
-    <!-- Footer -->
     <footer class="footer">
-        <p>&copy; {datetime.now().year} {user.full_name} | Powered by <strong>Here I am</strong></p>
+        <p>&copy; {current_year} {full_name} | Powered by <strong>Professionals Data Bank</strong></p>
     </footer>
     
     <script>
-        // Navbar scroll effect
         window.addEventListener('scroll', function() {{
             document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
         }});
-        
-        // Smooth scroll
-        document.querySelectorAll('a[href^="#"]').forEach(link => {{
+        document.querySelectorAll('a[href^="#"]').forEach(function(link) {{
             link.addEventListener('click', function(e) {{
                 e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+                var target = document.querySelector(this.getAttribute('href'));
                 if (target) target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
             }});
         }});
@@ -944,7 +663,170 @@ def build_complete_html(user, photo_url, email_display, email_link, mobile_displ
 </body>
 </html>'''
     
-    return html
+    # ⭐ Format the template with actual values
+    summary_html = f'<p class="hero-summary">{user.summary[:200]}...</p>' if user.summary else ''
+    
+    return html.format(
+        full_name=user.full_name or 'Professional',
+        domain=user.domain or 'General',
+        photo_url=photo_url,
+        email_display=email_display,
+        email_link=email_link,
+        mobile_display=mobile_display,
+        mobile_link=mobile_link,
+        summary_html=summary_html,
+        hero_meta_items=hero_meta_items,
+        sections_html=sections_html,
+        sidebar_info=sidebar_info,
+        sidebar_social=sidebar_social,
+        contact_social=contact_social,
+        skills_count=len(skills),
+        exp_count=len(experience),
+        edu_count=len(education),
+        proj_count=len(projects),
+        cert_count=len(certifications),
+        current_year=current_year,
+    )
+
+
+# ============================================================
+# SECTION BUILDERS
+# ============================================================
+
+def build_about_section(user):
+    if not user.summary:
+        return ''
+    return f'''
+    <div class="section-card" id="about">
+        <h2 class="section-title"><i class="fas fa-user"></i> About Me</h2>
+        <p style="font-size:0.88rem;color:var(--secondary);line-height:1.7;">{user.summary}</p>
+    </div>'''
+
+
+def build_skills_section(skills):
+    if not skills:
+        return ''
+    expert = skills[:3]
+    advanced = skills[3:6] if len(skills) > 3 else []
+    rest = skills[6:] if len(skills) > 6 else []
+    
+    html = ''.join([f'<span class="skill-item skill-level-expert"><i class="fas fa-star"></i> {s}</span>' for s in expert])
+    html += ''.join([f'<span class="skill-item skill-level-advanced"><i class="fas fa-check-circle"></i> {s}</span>' for s in advanced])
+    html += ''.join([f'<span class="skill-item">{s}</span>' for s in rest])
+    
+    return f'''
+    <div class="section-card" id="skills">
+        <h2 class="section-title"><i class="fas fa-cogs"></i> Skills & Expertise</h2>
+        <div class="skills-container">{html}</div>
+        <div style="margin-top:8px;display:flex;gap:12px;font-size:0.68rem;color:var(--secondary);">
+            <span><span class="skill-item skill-level-expert" style="font-size:0.65rem;padding:2px 8px;"><i class="fas fa-star"></i></span> Expert</span>
+            <span><span class="skill-item skill-level-advanced" style="font-size:0.65rem;padding:2px 8px;"><i class="fas fa-check-circle"></i></span> Advanced</span>
+        </div>
+    </div>'''
+
+
+def build_experience_section(experience):
+    if not experience:
+        return ''
+    html = ''
+    for exp in experience:
+        is_current = 'present' in exp.get('duration', '').lower()
+        html += f'''
+        <div class="exp-card{' current' if is_current else ''}">
+            <div class="exp-card-header">
+                <div>
+                    <div class="exp-title">{exp.get('title', '')}</div>
+                    <div class="exp-company">{exp.get('company', '')}</div>
+                </div>
+                <span class="exp-duration{' current-dur' if is_current else ''}">{exp.get('duration', '')}</span>
+            </div>
+            {f'<p class="exp-desc">{exp.get("description", "")}</p>' if exp.get('description') else ''}
+        </div>'''
+    
+    return f'''
+    <div class="section-card" id="experience">
+        <h2 class="section-title"><i class="fas fa-briefcase"></i> Work Experience</h2>
+        <div class="exp-list">{html}</div>
+    </div>'''
+
+
+def build_education_section(education):
+    if not education:
+        return ''
+    html = ''
+    for edu in education:
+        html += f'''
+        <div class="edu-card">
+            <div class="edu-degree">{edu.get('degree', '')}</div>
+            <div class="edu-inst">{edu.get('institution', '')}</div>
+            <span class="edu-year">{edu.get('year', '')}</span>
+        </div>'''
+    
+    return f'''
+    <div class="section-card" id="education">
+        <h2 class="section-title"><i class="fas fa-graduation-cap"></i> Education</h2>
+        <div class="edu-grid">{html}</div>
+    </div>'''
+
+
+def build_projects_section(projects):
+    if not projects:
+        return ''
+    html = ''
+    for proj in projects:
+        tech_tags = ''
+        if proj.get('technologies'):
+            for tech in proj['technologies'].split(',')[:4]:
+                tech_tags += f'<span class="proj-tech-tag">{tech.strip()}</span>'
+        
+        html += f'''
+        <div class="proj-card">
+            <div class="proj-name"><i class="fas fa-code me-1" style="color:var(--primary);"></i> {proj.get('name', '')}</div>
+            <p class="proj-desc">{proj.get('description', '')}</p>
+            {f'<div class="proj-tech">{tech_tags}</div>' if tech_tags else ''}
+        </div>'''
+    
+    return f'''
+    <div class="section-card" id="projects">
+        <h2 class="section-title"><i class="fas fa-project-diagram"></i> Projects</h2>
+        <div class="proj-grid">{html}</div>
+    </div>'''
+
+
+def build_certifications_section(certifications):
+    if not certifications:
+        return ''
+    html = ''.join([f'<span class="cert-tag"><i class="fas fa-certificate"></i> {c}</span>' for c in certifications])
+    
+    return f'''
+    <div class="section-card" id="certifications">
+        <h2 class="section-title"><i class="fas fa-certificate"></i> Certifications</h2>
+        <div class="cert-list">{html}</div>
+    </div>'''
+
+
+def build_languages_section(languages):
+    if not languages:
+        return ''
+    html = ''.join([f'<span class="lang-tag"><i class="fas fa-language me-1"></i> {l}</span>' for l in languages])
+    
+    return f'''
+    <div class="section-card" id="languages">
+        <h2 class="section-title"><i class="fas fa-language"></i> Languages</h2>
+        <div class="lang-list">{html}</div>
+    </div>'''
+
+
+def build_achievements_section(achievements):
+    if not achievements:
+        return ''
+    html = ''.join([f'<div class="ach-item"><i class="fas fa-trophy"></i> <span>{a}</span></div>' for a in achievements])
+    
+    return f'''
+    <div class="section-card" id="achievements">
+        <h2 class="section-title"><i class="fas fa-trophy"></i> Achievements & Awards</h2>
+        <div class="ach-list">{html}</div>
+    </div>'''
 
 
 def build_social_links(user):
@@ -957,148 +839,3 @@ def build_social_links(user):
     if user.portfolio:
         links += f'<a href="{user.portfolio}" target="_blank" class="social-link website" title="Website"><i class="fas fa-globe"></i></a>'
     return links
-
-
-def build_all_sections(user, skills, education, experience, projects, certifications, languages, achievements):
-    """Build all content sections"""
-    html = ''
-    
-    # About Section
-    if user.summary:
-        html += f'''
-        <section class="section-card" id="about">
-            <h2 class="section-title"><i class="fas fa-user"></i> About Me</h2>
-            <div class="section-subtitle">{user.summary}</div>
-        </section>'''
-    
-    # Skills Section
-    if skills:
-        mid = len(skills) // 2
-        expert_skills = skills[:3]  # First 3 as expert
-        advanced_skills = skills[3:6]  # Next 3 as advanced
-        rest_skills = skills[6:] if len(skills) > 6 else []
-        
-        skills_html = ''
-        for skill in expert_skills:
-            skills_html += f'<span class="skill-item skill-level-expert"><i class="fas fa-star"></i> {skill}</span>'
-        for skill in advanced_skills:
-            skills_html += f'<span class="skill-item skill-level-advanced"><i class="fas fa-check-circle"></i> {skill}</span>'
-        for skill in rest_skills:
-            skills_html += f'<span class="skill-item">{skill}</span>'
-        
-            html += f'''
-            <section class="section-card" id="skills">
-                <h2 class="section-title"><i class="fas fa-cogs"></i> Skills & Expertise</h2>
-                <div class="skills-container">{skills_html}</div>
-                <div style="margin-top:16px;display:flex;gap:16px;font-size:0.75rem;color:var(--secondary);">
-                    <span><span class="skill-item skill-level-expert" style="font-size:0.7rem;padding:4px 10px;"><i class="fas fa-star"></i></span> Expert</span>
-                    <span><span class="skill-item skill-level-advanced" style="font-size:0.7rem;padding:4px 10px;"><i class="fas fa-check-circle"></i></span> Advanced</span>
-                </div>
-            </section>'''
-    
-    # Experience Section
-    if experience:
-        exp_html = ''
-        for i, exp in enumerate(experience):
-            is_current = 'present' in exp.get('duration', '').lower()
-            exp_html += f'''
-            <div class="timeline-item">
-                <div class="timeline-dot{' current' if is_current else ''}"></div>
-                <div class="timeline-header">
-                    <div>
-                        <div class="timeline-title">{exp.get('title', '')}</div>
-                        <div class="timeline-company">{exp.get('company', '')}</div>
-                    </div>
-                    <span class="timeline-duration{' current-duration' if is_current else ''}">{exp.get('duration', '')}</span>
-                </div>
-                <p class="timeline-description">{exp.get('description', '')}</p>
-            </div>'''
-        
-        html += f'''
-        <section class="section-card" id="experience">
-            <h2 class="section-title"><i class="fas fa-briefcase"></i> Work Experience</h2>
-            <div class="timeline">{exp_html}</div>
-        </section>'''
-    
-    # Education Section
-    if education:
-        edu_html = ''
-        for edu in education:
-            edu_html += f'''
-            <div class="education-item">
-                <div class="education-icon"><i class="fas fa-graduation-cap"></i></div>
-                <div class="education-info">
-                    <div class="education-degree">{edu.get('degree', '')}</div>
-                    <div class="education-institution">{edu.get('institution', '')}</div>
-                    <span class="education-year">{edu.get('year', '')}</span>
-                </div>
-            </div>'''
-        
-        html += f'''
-        <section class="section-card" id="education">
-            <h2 class="section-title"><i class="fas fa-graduation-cap"></i> Education</h2>
-            {edu_html}
-        </section>'''
-    
-    # Projects Section
-    if projects:
-        proj_html = ''
-        for proj in projects:
-            tech_tags = ''
-            if proj.get('technologies'):
-                for tech in proj['technologies'].split(',')[:4]:
-                    tech_tags += f'<span class="project-tech-tag">{tech.strip()}</span>'
-            
-            proj_html += f'''
-            <div class="project-card">
-                <div class="project-card-header">
-                    <div class="project-icon"><i class="fas fa-code"></i></div>
-                    <div class="project-name">{proj.get('name', '')}</div>
-                </div>
-                <p class="project-desc">{proj.get('description', '')}</p>
-                {f'<div class="project-tech">{tech_tags}</div>' if tech_tags else ''}
-            </div>'''
-        
-        html += f'''
-        <section class="section-card" id="projects">
-            <h2 class="section-title"><i class="fas fa-project-diagram"></i> Projects</h2>
-            <div class="projects-grid">{proj_html}</div>
-        </section>'''
-    
-    # Certifications Section
-    if certifications:
-        cert_html = ''
-        for cert in certifications:
-            cert_html += f'<span class="cert-item"><i class="fas fa-certificate"></i> {cert}</span>'
-        
-        html += f'''
-        <section class="section-card" id="certifications">
-            <h2 class="section-title"><i class="fas fa-certificate"></i> Certifications</h2>
-            <div class="cert-list">{cert_html}</div>
-        </section>'''
-    
-    # Languages Section
-    if languages:
-        lang_html = ''
-        for lang in languages:
-            lang_html += f'<span class="lang-item"><i class="fas fa-language me-1"></i> {lang}</span>'
-        
-        html += f'''
-        <section class="section-card" id="languages">
-            <h2 class="section-title"><i class="fas fa-language"></i> Languages</h2>
-            <div class="lang-list">{lang_html}</div>
-        </section>'''
-    
-    # Achievements Section
-    if achievements:
-        ach_html = ''
-        for ach in achievements:
-            ach_html += f'<div class="achievement-item"><i class="fas fa-trophy"></i> <span>{ach}</span></div>'
-        
-        html += f'''
-        <section class="section-card" id="achievements">
-            <h2 class="section-title"><i class="fas fa-trophy"></i> Achievements & Awards</h2>
-            {ach_html}
-        </section>'''
-    
-    return html

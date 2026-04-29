@@ -174,29 +174,129 @@ def extract_skills_list(text):
     return found[:20]
 
 def extract_experience_years_text(text):
-    """Extract experience years"""
+    """Extract experience years from CV - IMPROVED"""
+    if not text:
+        return ""
+    
+    # ⭐ Pattern 1: Direct mention like "18+ years", "5 years of experience"
     patterns = [
-        r'(\d+)\+?\s*years?\s*(?:of)?\s*experience',
-        r'experience\s*(?:of)?\s*(\d+)\+?\s*years?',
+        # "18+ years of experience", "5 years experience"
+        r'(\d+)\+?\s*years?\s*(?:of\s*)?(?:work\s*)?experience',
+        # "experience of 10 years", "experience: 7 years"
+        r'experience\s*(?:of|:)?\s*(\d+)\+?\s*years?',
+        # "total experience: 12 years"
+        r'total\s*experience\s*(?:of|:)?\s*(\d+)\+?\s*years?',
+        # "over 15 years", "more than 8 years"
+        r'(?:over|more\s*than|about|approx\.?\s*)\s*(\d+)\+?\s*years?',
+        # "10+ yrs", "5 yrs"
+        r'(\d+)\+?\s*yrs?\b',
+        # "Experience: 10 years"
+        r'experience\s*:?\s*(\d+)\+?\s*(?:years?|yrs?)',
     ]
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return f"{match.group(1)}+ years"
+            years = match.group(1)
+            return f"{years}+ years"
     
-    dates = re.findall(r'(20\d{2})\s*[-–to]+\s*(20\d{2}|[Pp]resent|[Cc]urrent|[Nn]ow)', text)
-    if dates:
-        total = 0
-        for start, end in dates:
-            s = int(start)
-            e = 2024 if end.lower() in ['present', 'current', 'now'] else int(end)
-            total += max(0, e - s)
-        if total > 0:
-            return f"{total}+ years"
+    # ⭐ Pattern 2: Calculate from date ranges in experience section
+    # Find experience section
+    exp_section_patterns = [
+        r'(?:work\s*)?experience\s*:?\s*\n(.*?)(?:\n\s*(?:education|skills|projects|certifications|$))',
+        r'(?:employment|work\s*history)\s*:?\s*\n(.*?)(?:\n\s*(?:education|skills|projects|certifications|$))',
+    ]
     
-    return "Fresher"
-
+    exp_text = ""
+    for pattern in exp_section_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            exp_text = match.group(1)
+            break
+    
+    if not exp_text:
+        # If no clear experience section, use whole text
+        exp_text = text
+    
+    # Find all date ranges like "2020 - Present", "2018 - 2022", "Jan 2020 - Dec 2023"
+    date_ranges = re.findall(
+        r'(?:19|20)\d{2}\s*[-–to]+\s*(?:[Pp]resent|[Cc]urrent|[Nn]ow|(?:19|20)\d{2})',
+        exp_text
+    )
+    
+    if date_ranges:
+        total_years = 0
+        for date_range in date_ranges:
+            years = re.findall(r'(19|20)\d{2}', date_range)
+            if len(years) >= 2:
+                start_year = int(years[0])
+                end_year = int(years[1])
+                total_years += max(0, end_year - start_year)
+            elif len(years) == 1:
+                start_year = int(years[0])
+                if 'present' in date_range.lower() or 'current' in date_range.lower() or 'now' in date_range.lower():
+                    end_year = datetime.now().year
+                    total_years += max(0, end_year - start_year)
+        
+        if total_years > 0:
+            return f"{total_years}+ years"
+    
+    # ⭐ Pattern 3: Count individual experience entries
+    # Look for job titles with company names
+    job_entries = re.findall(
+        r'(?:developer|engineer|manager|analyst|consultant|lead|architect|administrator|designer|specialist)',
+        exp_text, re.IGNORECASE
+    )
+    
+    if len(job_entries) >= 2:
+        # Estimate: each job = 2-3 years average
+        estimated_years = len(job_entries) * 2
+        return f"{estimated_years}+ years"
+    
+    # ⭐ Pattern 4: Check for "Senior", "Lead", "Principal" keywords suggesting experience
+    senior_keywords = re.findall(
+        r'\b(?:senior|lead|principal|head|chief|director|manager|architect)\b',
+        text, re.IGNORECASE
+    )
+    
+    if len(senior_keywords) >= 2:
+        return "5+ years"
+    elif len(senior_keywords) >= 1:
+        return "3+ years"
+    
+    # ⭐ Pattern 5: Check education year to estimate
+    edu_years = re.findall(r'(?:19|20)\d{2}', text[:500])  # First 500 chars (header area)
+    if edu_years:
+        latest_edu_year = max(int(y) for y in edu_years if 2000 <= int(y) <= datetime.now().year)
+        current_year = datetime.now().year
+        estimated = current_year - latest_edu_year - 1  # -1 for graduation buffer
+        if estimated > 0:
+            if estimated <= 1:
+                return "Fresher"
+            elif estimated <= 3:
+                return "1+ year"
+            else:
+                return f"{estimated}+ years"
+    
+    # ⭐ FINAL FALLBACK: Really no experience found
+    # But first, check if there's ANY mention of years
+    all_years_mentions = re.findall(r'(\d+)\s*\+?\s*years?', text, re.IGNORECASE)
+    if all_years_mentions:
+        max_years = max(int(y) for y in all_years_mentions if int(y) <= 50)
+        if max_years > 0:
+            return f"{max_years}+ years"
+    
+    # Check if CV belongs to a fresher (contains keywords)
+    fresher_keywords = ['fresher', 'fresh graduate', 'no experience', 'entry level', 'trainee', 'intern']
+    for keyword in fresher_keywords:
+        if keyword in text.lower():
+            return "Fresher"
+    
+    # If nothing else, check if the person seems experienced based on CV length
+    if len(text) > 2000 and len(job_entries) > 0:
+        return "2+ years"
+    
+    return ""
 def extract_education_list(sections, text):
     """Extract education"""
     education = []
