@@ -763,7 +763,7 @@ def start_job_scraper(app):
             scrape_all_domains()
         
         while True:
-            time.sleep(75000)  # 1 hour
+            time.sleep(36000)  # 1 hour
             with app.app_context():
                 print("\n🔄 SCHEDULED LIGHT SCRAPE...")
                 scrape_lightweight()
