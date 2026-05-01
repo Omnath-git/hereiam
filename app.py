@@ -20,7 +20,10 @@ def create_app():
         'pool_recycle': 3600,
         'pool_pre_ping': True,
     }
-    
+@app.route('/admin-login', methods=['GET', 'POST'])
+def admin_login():
+    from blueprints.admin import admin_bp
+    return admin_bp.view_functions['admin_login']()    
 
     db.init_app(app)
     create_directories(app)
